@@ -33,9 +33,9 @@ class SessionManagerImpl() : SessionManager {
         val expiredSessions = sessionsByLastAccess.headMap(currentTime, false)
         expiredSessions.forEach { (_, sessionIds) ->
             sessionIds.forEach {
-                val userId = se
-                sessionsByUser[sessions[it]?.userId]?.remove(it)
+                val userId = sessions[it]?.userId
                 sessions.remove(it)
+                if (userId != null) sessionsByUser[userId]?.remove(it)
             }
         }
         expiredSessions.clear()
