@@ -1,9 +1,22 @@
 import java.util.TreeMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class SessionManagerImpl() : SessionManager {
     private val sessions = mutableMapOf<String, Session>()
     private val sessionsByLastAccess = TreeMap<Long, MutableSet<String>>()
     private val sessionsByUser = mutableMapOf<String, MutableSet<String>>()
+    private val executor = Executors.newSingleThreadScheduledExecutor()
+
+    fun startAutoExpire() {
+        executor.scheduleAtFixedRate({
+            try {
+                expire(System.currentTimeMillis())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }, 1, 10, TimeUnit.SECONDS)
+    }
 
     override fun createSession(sessionId: String, userId: String, durationSeconds: Int, currentTime: Long) {
         if (sessions.containsKey(sessionId))
