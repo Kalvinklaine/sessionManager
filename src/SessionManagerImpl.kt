@@ -8,6 +8,10 @@ class SessionManagerImpl() : SessionManager {
     private val sessionsByUser = mutableMapOf<String, MutableSet<String>>()
     private val executor = Executors.newSingleThreadScheduledExecutor()
 
+    init {
+        startAutoExpire()
+    }
+
     fun startAutoExpire() {
         executor.scheduleAtFixedRate({
             try {
