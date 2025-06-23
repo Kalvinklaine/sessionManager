@@ -1,12 +1,14 @@
 import java.util.TreeMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
 
 class SessionManagerImpl() : SessionManager {
     private val sessions = mutableMapOf<String, Session>()
     private val sessionsByLastAccess = TreeMap<Long, MutableSet<String>>()
     private val sessionsByUser = mutableMapOf<String, MutableSet<String>>()
     private val executor = Executors.newSingleThreadScheduledExecutor()
+    private val lock = ReentrantLock()
 
     init {
         startAutoExpire()
@@ -22,15 +24,26 @@ class SessionManagerImpl() : SessionManager {
         }, 1, 10, TimeUnit.SECONDS)
     }
 
+    fun shutdown() {
+        executor.shutdown()
+    }
+
+    @Synchronized
     override fun createSession(sessionId: String, userId: String, durationSeconds: Int, currentTime: Long) {
         if (sessions.containsKey(sessionId))
             throw IllegalStateException("Session already exists")
 
-        sessions[sessionId] = Session(sessionId, userId, durationSeconds, lastAccesses = currentTime)
-        sessionsByLastAccess.getOrPut(currentTime + durationSeconds * 1000) { mutableSetOf() }.add(sessionId)
-        sessionsByUser.getOrPut(userId) { mutableSetOf() }.add(sessionId)
+        lock.lock()
+        try {
+            sessions[sessionId] = Session(sessionId, userId, durationSeconds, lastAccesses = currentTime)
+            sessionsByLastAccess.getOrPut(currentTime + durationSeconds * 1000) { mutableSetOf() }.add(sessionId)
+            sessionsByUser.getOrPut(userId) { mutableSetOf() }.add(sessionId)
+        }finally {
+            lock.unlock()
+        }
     }
 
+    @Synchronized
     override fun touch(sessionId: String, currentTime: Long) {
         // Create session?
         val session = sessions[sessionId] ?: throw IllegalStateException("Session doesn't exist")
@@ -40,11 +53,13 @@ class SessionManagerImpl() : SessionManager {
         sessionsByLastAccess.getOrPut(currentTime + session.durationSeconds * 1000) { mutableSetOf() }.add(sessionId)
     }
 
+    @Synchronized
     override fun isActive(sessionId: String, currentTime: Long): Boolean {
         val session = sessions[sessionId] ?: return false
         return (currentTime - session.lastAccesses) < session.durationSeconds * 1000
     }
 
+    @Synchronized
     override fun expire(currentTime: Long) {
         sessions.entries.removeIf { currentTime - it.value.lastAccesses > it.value.durationSeconds * 1000 }
         val expiredSessions = sessionsByLastAccess.headMap(currentTime, false)
